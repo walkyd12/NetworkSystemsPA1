@@ -53,16 +53,35 @@ int main (int argc, char * argv[])
 	  it will report an error if the message fails to leave the computer
 	  however, with UDP, there is no error if the message is lost in the network once it leaves the computer.
 	 ******************/
-	char command[] = "apple";	
-	nbytes = sendto(sock, command, strlen(command), 0, (struct sockaddr *)&remote, sizeof(remote));
+	while(1) {
+		printf("\n");
+		printf("-----------------------------------\n");
+		printf("Type one of the following commands:\n");
+		printf("-----------------------------------\n");
+		printf("get [file_name]\n");
+		printf("put [file_name]\n");
+		printf("delete [file_name]\n");
+		printf("ls\n\n");
+		printf("exit\n");
+		printf("-----------------------------------\n");
 
-	// Blocks till bytes are received
-	struct sockaddr_in from_addr;
-	int addr_length = sizeof(struct sockaddr);
-	bzero(buffer,sizeof(buffer));
-	nbytes = recvfrom(sock, buffer, MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length);
+		char command[100];
+		scanf("%s", command);
+		printf("\n");
 
-	printf("Server says %s\n", buffer);
+		nbytes = sendto(sock, command, strlen(command), 0, (struct sockaddr *) &remote, sizeof(remote));
+
+		if(0 == memcmp("exit", command, 4))
+			break;
+
+		// Blocks till bytes are received
+		struct sockaddr_in from_addr;
+		int addr_length = sizeof(struct sockaddr);
+		bzero(buffer, sizeof(buffer));
+		nbytes = recvfrom(sock, buffer, MAXBUFSIZE, 0, (struct sockaddr *) &remote, &remote_length);
+
+		printf("Server says %s\n", buffer);
+	}
 
 	close(sock);
 

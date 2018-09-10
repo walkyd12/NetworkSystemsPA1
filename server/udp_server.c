@@ -58,15 +58,19 @@ int main (int argc, char * argv[] )
 	}
 
 	remote_length = sizeof(remote);
+	while(1) {
+		//waits for an incoming message
+		bzero(buffer, sizeof(buffer));
+		nbytes = recvfrom(sock, buffer, MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length);
 
-	//waits for an incoming message
-	bzero(buffer,sizeof(buffer));
-	nbytes = recvfrom(sock, buffer, MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length);
+		printf("The client says %s\n", buffer);
 
-	printf("The client says %s\n", buffer);
+		if(0 == memcmp("exit", buffer, 4))
+			break;
 
-	char msg[] = "orange";
-	nbytes = sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&remote, sizeof(remote));
+		char msg[] = "orange";
+		nbytes = sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&remote, sizeof(remote));
+	}
 
 	close(sock);
 }
