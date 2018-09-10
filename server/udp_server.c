@@ -16,6 +16,8 @@
 
 #define MAXBUFSIZE 100
 
+int GetFile();
+
 int main (int argc, char * argv[] )
 {
 
@@ -65,8 +67,11 @@ int main (int argc, char * argv[] )
 
 		printf("The client says %s\n", buffer);
 
+		int ret;
 		if(0 == memcmp("exit", buffer, 4))
 			break;
+		if(0 == memcmp("get", buffer, 3))
+			ret = GetFile(buffer);
 
 		char msg[] = "orange";
 		nbytes = sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&remote, sizeof(remote));
@@ -75,3 +80,10 @@ int main (int argc, char * argv[] )
 	close(sock);
 }
 
+int GetFile(char* cmdBuf) {
+	char filename[MAXBUFSIZE-4];
+	memcpy(cmdBuf+4,filename,MAXBUFSIZE-4);
+
+
+	return 1;
+}

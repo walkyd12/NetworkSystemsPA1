@@ -65,9 +65,11 @@ int main (int argc, char * argv[])
 		printf("exit\n");
 		printf("-----------------------------------\n");
 
-		char command[100];
-		scanf("%s", command);
-		printf("\n");
+		char command[MAXBUFSIZE];
+		// Get user input and remove new line characters
+		fgets(command, MAXBUFSIZE, stdin);
+		if ((strlen(command) > 0) && (command[strlen(command) - 1] == '\n'))
+			command[strlen(command) - 1] = '\0';
 
 		nbytes = sendto(sock, command, strlen(command), 0, (struct sockaddr *) &remote, sizeof(remote));
 
