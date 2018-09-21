@@ -15,7 +15,7 @@
 #define MAXBUFSIZE 1000000
 #define cipherKey 'S'
 
-char *END_FLAG = "================END";
+char *END_FLAG = "ENDOFFILEENDOFFILEENDOFFILE";
 char* SUCC_FLAG = "ok";
 char* FILE_ERR_FLAG = "File not found.";
 
@@ -123,7 +123,6 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename, unsigned int re
 
 	// Store file contents in filename buffer
     while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
-        filename[n] = 0;
         if (!(strcmp(filename, END_FLAG)) || !(strcmp(filename, FILE_ERR_FLAG))) {
             break;
         }
@@ -137,20 +136,24 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename, unsigned int re
 int PutFile(int sock, struct sockaddr_in remote, char* filename) {
 	int n, fd, nbytes;
 
-	if ((strlen(filename) > 0) && (filename[strlen(filename) - 1] == '\n'))
-		filename[strlen(filename) - 1] = '\0';
-
+	// Attempt to open the file with read only priveledges
     fd = open(filename, 'r');
 
+    // if the file descriptor is less than 0, the file was not opened successfully
     if (fd < 0) {
+    	// Print client error message
     	printf("\nFile open failed! File: %s\n", filename);
+    	// Send file error signal to server
 		sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
         return 0;
 	}
     
+    // The file was opened succesfully, read from the file into the filename buffer
     while ((n = read(fd, filename, MAXBUFSIZE-4)) > 0) {
+    	// send the buffer to the server
         sendto(sock, filename, n, 0, (struct sockaddr *)&remote, sizeof(remote));
     }
+    // Send the end of file signal to the server
     sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 
 	return 1;

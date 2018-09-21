@@ -17,7 +17,7 @@
 #define MAXBUFSIZE 1000000
 #define cipherKey 'S'
 
-char* END_FLAG = "================END";
+char* END_FLAG = "ENDOFFILEENDOFFILEENDOFFILE";
 char* SUCC_FLAG = "ok";
 char* FILE_ERR_FLAG = "File not found.";
 char* FILE_SUCC_FLAG = "File found.";
@@ -93,9 +93,6 @@ int main (int argc, char * argv[] )
 int GetFile(int sock, struct sockaddr_in remote, char* filename) {
 	int n, fd, nbytes;
 
-	if ((strlen(filename) > 0) && (filename[strlen(filename) - 1] == '\n'))
-		filename[strlen(filename) - 1] = '\0';
-
 	// Attempt to open file named filename, read only
     fd = open(filename, 'r');
 
@@ -116,32 +113,37 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename) {
     }
     // Send the end of file flag to the client
     sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+    // Send success message back to client
     sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 	return 1;
 }
 int PutFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length) {
 	int fd, n, nbytes;
+	// Open a new file with the name file name with read, write and create flags set
 	fd = open(filename, O_RDWR | O_CREAT, 0666);
-	printf("%s\n", filename);
 
+	// Store file contents in filename buffer
     while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
-        filename[n] = 0;
+        // If we get the signal of the end of the file or if there is an error, stop waiting for data
         if (!(strcmp(filename, END_FLAG)) || !(strcmp(filename, FILE_ERR_FLAG))) {
             break;
         }
+        // write data from the filename buffer into the new file
         write(fd, filename, n);
     }
     close(fd);
-
+    // Send success signal back to client
 	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 
 	return 1;
 }
 int DeleteFile(int sock, struct sockaddr_in remote, char* filename) {
+	// If remove filename is not 0, there is no such file so send error back
 	if(remove(filename) != 0) {
 		sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 		return 0;
 	}
+	// Otherwise, remove(filename) is 0 meaning the file was successfully removed, so send success signal
 	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 	return 1;
 }
