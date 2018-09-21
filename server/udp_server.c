@@ -14,14 +14,21 @@
 #include <string.h>
 /* You will have to modify the program below */
 
-#define MAXBUFSIZE 100
+#define MAXBUFSIZE 1000000
+#define cipherKey 'S'
 
-int GetFile();
+char* END_FLAG = "================END";
+char* SUCC_FLAG = "ok";
+char* FILE_ERR_FLAG = "File not found.";
+char* FILE_SUCC_FLAG = "File found.";
+
+int GetFile(int sock, struct sockaddr_in remote,char* filename);
+int PutFile(int sock, struct sockaddr_in remote,char* filename, unsigned int remote_length);
+int DeleteFile(int sock, struct sockaddr_in remote,char* filename);
+int List(int sock, struct sockaddr_in remote);
 
 int main (int argc, char * argv[] )
 {
-
-
 	int sock;							//This will be our socket
 	struct sockaddr_in sin, remote;		//"Internet socket address structure"
 	unsigned int remote_length;			//length of the sockaddr_in structure
@@ -42,13 +49,11 @@ int main (int argc, char * argv[] )
 	sin.sin_port = htons(atoi(argv[1]));        //htons() sets the port # to network byte order
 	sin.sin_addr.s_addr = INADDR_ANY;           //supplies the IP address of the local machine
 
-
 	//Causes the system to create a generic socket of type UDP (datagram)
 	if ((sock = socket(AF_INET, SOCK_DGRAM, 0) ) < 0)
 	{
 		printf("unable to create socket");
 	}
-
 
 	/******************
 	  Once we've created a socket, we must bind that socket to the 
@@ -60,6 +65,7 @@ int main (int argc, char * argv[] )
 	}
 
 	remote_length = sizeof(remote);
+
 	while(1) {
 		//waits for an incoming message
 		bzero(buffer, sizeof(buffer));
@@ -68,22 +74,77 @@ int main (int argc, char * argv[] )
 		printf("The client says %s\n", buffer);
 
 		int ret;
+		char output[256];
 		if(0 == memcmp("exit", buffer, 4))
 			break;
 		if(0 == memcmp("get", buffer, 3))
-			ret = GetFile(buffer);
-
-		char msg[] = "orange";
-		nbytes = sendto(sock, msg, strlen(msg), 0, (struct sockaddr *)&remote, sizeof(remote));
+			ret = GetFile(sock, remote, buffer+4);
+		if(0 == memcmp("put", buffer, 3))
+			ret = PutFile(sock, remote, buffer+4, remote_length);
+		if(0 == memcmp("delete", buffer, 6))
+			ret = DeleteFile(sock, remote, buffer+7);
+		if(0 == memcmp("ls", buffer, 2))
+			ret = List(sock, remote);
 	}
 
 	close(sock);
 }
 
-int GetFile(char* cmdBuf) {
-	char filename[MAXBUFSIZE-4];
-	memcpy(cmdBuf+4,filename,MAXBUFSIZE-4);
+int GetFile(int sock, struct sockaddr_in remote, char* filename) {
+	int n, fd, nbytes;
 
+	if ((strlen(filename) > 0) && (filename[strlen(filename) - 1] == '\n'))
+		filename[strlen(filename) - 1] = '\0';
 
+	// Attempt to open file named filename, read only
+    fd = open(filename, 'r');
+
+    // File does not exist
+    if (fd < 0) {
+    	printf("\nFile open failed! File: %s\n", filename);
+		// Send file not found error to client
+		sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+        return 0;
+	}
+    // Found a file, send file found message to client
+    sendto(sock, FILE_SUCC_FLAG, strlen(FILE_SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+    
+    // Read the contents of the file and store it in the filename buffer
+    while ((n = read(fd, filename, MAXBUFSIZE-4)) > 0) {
+        // Send this data to the client
+        sendto(sock, filename, n, 0, (struct sockaddr *)&remote, sizeof(remote));
+    }
+    // Send the end of file flag to the client
+    sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+    sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+	return 1;
+}
+int PutFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length) {
+	int fd, n, nbytes;
+	fd = open(filename, O_RDWR | O_CREAT, 0666);
+	printf("%s\n", filename);
+
+    while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
+        filename[n] = 0;
+        if (!(strcmp(filename, END_FLAG)) || !(strcmp(filename, FILE_ERR_FLAG))) {
+            break;
+        }
+        write(fd, filename, n);
+    }
+    close(fd);
+
+	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+
+	return 1;
+}
+int DeleteFile(int sock, struct sockaddr_in remote, char* filename) {
+	if(remove(filename) != 0) {
+		sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+		return 0;
+	}
+	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+	return 1;
+}
+int List(int sock, struct sockaddr_in remote) {
 	return 1;
 }

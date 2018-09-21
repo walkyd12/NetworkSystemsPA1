@@ -12,7 +12,15 @@
 #include <memory.h>
 #include <errno.h>
 
-#define MAXBUFSIZE 100
+#define MAXBUFSIZE 1000000
+#define cipherKey 'S'
+
+char *END_FLAG = "================END";
+char* SUCC_FLAG = "ok";
+char* FILE_ERR_FLAG = "File not found.";
+
+int PutFile(int sock, struct sockaddr_in remote,char* filename);
+int GetFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length);
 
 /* You will have to modify the program below */
 
@@ -71,8 +79,20 @@ int main (int argc, char * argv[])
 		if ((strlen(command) > 0) && (command[strlen(command) - 1] == '\n'))
 			command[strlen(command) - 1] = '\0';
 
-		nbytes = sendto(sock, command, strlen(command), 0, (struct sockaddr *) &remote, sizeof(remote));
+		int ret;
 
+		nbytes = sendto(sock, command, strlen(command), 0, (struct sockaddr *) &remote, sizeof(remote));
+		
+		if(0 == memcmp("put", command, 3)) {
+			ret = PutFile(sock, remote, command+4);
+			if(ret == 0)
+				continue;
+		}
+		if(0 == memcmp("get", command, 3)) {
+			ret = GetFile(sock, remote, command+4, remote_length);
+			if(ret == 0)
+				continue;
+		}
 		if(0 == memcmp("exit", command, 4))
 			break;
 
@@ -86,6 +106,56 @@ int main (int argc, char * argv[])
 	}
 
 	close(sock);
-
 }
+int GetFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length) {
+	int fd, n, nbytes;
+	
+	// Store server acknowledgement in buffer
+	char buffer[100];
+	// Wait for server to acknowledge if file is found
+	n = recvfrom(sock, buffer, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length);
+	// File not found error check
+	if (!(strcmp(filename, FILE_ERR_FLAG))) {
+        return 0;
+    }
+    // Open a new file with the name file name with read, write and create flags set
+	fd = open(filename, O_RDWR | O_CREAT, 0666);
+
+	// Store file contents in filename buffer
+    while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
+        filename[n] = 0;
+        if (!(strcmp(filename, END_FLAG)) || !(strcmp(filename, FILE_ERR_FLAG))) {
+            break;
+        }
+        // Write the contents of the buffer from the file stream and write it to the file we created
+        write(fd, filename, n);
+    }
+    close(fd);
+
+	return 1;
+}
+int PutFile(int sock, struct sockaddr_in remote, char* filename) {
+	int n, fd, nbytes;
+
+	if ((strlen(filename) > 0) && (filename[strlen(filename) - 1] == '\n'))
+		filename[strlen(filename) - 1] = '\0';
+
+    fd = open(filename, 'r');
+
+    if (fd < 0) {
+    	printf("\nFile open failed! File: %s\n", filename);
+		sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+        return 0;
+	}
+    
+    while ((n = read(fd, filename, MAXBUFSIZE-4)) > 0) {
+        sendto(sock, filename, n, 0, (struct sockaddr *)&remote, sizeof(remote));
+    }
+    sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+
+	return 1;
+}
+
+
+
 
