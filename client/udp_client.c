@@ -15,7 +15,7 @@
 #define MAXBUFSIZE 1000000
 #define cipherKey 'S'
 
-char *END_FLAG = "ENDOFFILEENDOFFILEENDOFFILE";
+char *END_FLAG = "#End of File#";
 char* SUCC_FLAG = "ok";
 char* FILE_ERR_FLAG = "File not found.";
 
@@ -101,7 +101,6 @@ int main (int argc, char * argv[])
 		int addr_length = sizeof(struct sockaddr);
 		bzero(buffer, sizeof(buffer));
 		nbytes = recvfrom(sock, buffer, MAXBUFSIZE, 0, (struct sockaddr *) &remote, &remote_length);
-
 		printf("Server says %s\n", buffer);
 	}
 
@@ -123,7 +122,7 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename, unsigned int re
 
 	// Store file contents in filename buffer
     while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
-        if (!(strcmp(filename, END_FLAG)) || !(strcmp(filename, FILE_ERR_FLAG))) {
+        if (!(memcmp(filename, END_FLAG, sizeof(&END_FLAG))) || !(memcmp(filename, FILE_ERR_FLAG, sizeof(&FILE_ERR_FLAG)))) {
             break;
         }
         // Write the contents of the buffer from the file stream and write it to the file we created
@@ -153,6 +152,7 @@ int PutFile(int sock, struct sockaddr_in remote, char* filename) {
     	// send the buffer to the server
         sendto(sock, filename, n, 0, (struct sockaddr *)&remote, sizeof(remote));
     }
+
     // Send the end of file signal to the server
     sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 

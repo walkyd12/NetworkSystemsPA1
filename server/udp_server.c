@@ -12,12 +12,13 @@
 #include <stdlib.h>
 #include <memory.h>
 #include <string.h>
+#include <dirent.h>
 /* You will have to modify the program below */
 
 #define MAXBUFSIZE 1000000
 #define cipherKey 'S'
 
-char* END_FLAG = "ENDOFFILEENDOFFILEENDOFFILE";
+char* END_FLAG = "#End of file.#";
 char* SUCC_FLAG = "ok";
 char* FILE_ERR_FLAG = "File not found.";
 char* FILE_SUCC_FLAG = "File found.";
@@ -125,15 +126,16 @@ int PutFile(int sock, struct sockaddr_in remote, char* filename, unsigned int re
 	// Store file contents in filename buffer
     while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
         // If we get the signal of the end of the file or if there is an error, stop waiting for data
-        if (!(strcmp(filename, END_FLAG)) || !(strcmp(filename, FILE_ERR_FLAG))) {
+        if (!(memcmp(filename, END_FLAG, sizeof(&END_FLAG)) || !(memcmp(filename, FILE_ERR_FLAG, sizeof(&END_FLAG))))) {
             break;
         }
         // write data from the filename buffer into the new file
         write(fd, filename, n);
     }
     close(fd);
-    // Send success signal back to client
-	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+
+	// Send success signal back to client
+   	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
 
 	return 1;
 }
@@ -148,5 +150,20 @@ int DeleteFile(int sock, struct sockaddr_in remote, char* filename) {
 	return 1;
 }
 int List(int sock, struct sockaddr_in remote) {
+	char buffer[MAXBUFSIZE] = {"\n\n"};
+	DIR *d;
+    struct dirent *dir;
+    d = opendir(".");
+    if (d) {
+        while ((dir = readdir(d)) != NULL) {
+            if(dir->d_name[0] != '.') {
+            	strcat(buffer, dir->d_name);
+            	strcat(buffer, "\n");
+        	}
+        }
+        closedir(d);
+        buffer[strlen(buffer) - 1] = '\0'; 
+        sendto(sock, buffer, strlen(buffer), 0, (struct sockaddr *)&remote, sizeof(remote));
+    }
 	return 1;
 }
