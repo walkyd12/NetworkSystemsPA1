@@ -1,2 +1,2 @@
-client: uftp_client.c
-	gcc -o client uftp_client.c
+client: sha2.c uftp_client.c
+	gcc -o client sha2.c uftp_client.c
