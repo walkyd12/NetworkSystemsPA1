@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <time.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -20,8 +21,9 @@
 
 char* END_FLAG = "#End of file.#";
 char* SUCC_FLAG = "ok";
-char* FILE_ERR_FLAG = "File not found.";
-char* FILE_SUCC_FLAG = "File found.";
+char* FAIL_FLAG = "not ok";
+char* FILE_ERR_FLAG = "file not found.";
+char* FILE_SUCC_FLAG = "file found.";
 
 int GetFile(int sock, struct sockaddr_in remote,char* filename);
 int PutFile(int sock, struct sockaddr_in remote,char* filename, unsigned int remote_length);
@@ -86,6 +88,9 @@ int main (int argc, char * argv[] )
 			ret = DeleteFile(sock, remote, buffer+7);
 		if(0 == memcmp("ls", buffer, 2))
 			ret = List(sock, remote);
+
+		if(ret == 0)
+			printf("File transfer error.\n");
 	}
 
 	close(sock);
@@ -116,23 +121,31 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename) {
     sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
     // Send success message back to client
     sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+    close(fd);
 	return 1;
 }
 int PutFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length) {
 	int fd, n, nbytes;
+	
 	// Open a new file with the name file name with read, write and create flags set
 	fd = open(filename, O_RDWR | O_CREAT, 0666);
+
+	struct timeval stop, start;
+	gettimeofday(&start, NULL);
 
 	// Store file contents in filename buffer
     while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
         // If we get the signal of the end of the file or if there is an error, stop waiting for data
-        if (!(memcmp(filename, END_FLAG, sizeof(&END_FLAG)) || !(memcmp(filename, FILE_ERR_FLAG, sizeof(&END_FLAG))))) {
+        if (!(memcmp(filename, END_FLAG, sizeof(&END_FLAG)) || !(memcmp(filename, FILE_ERR_FLAG, sizeof(&FILE_ERR_FLAG))))) {
             break;
         }
         // write data from the filename buffer into the new file
         write(fd, filename, n);
     }
     close(fd);
+
+    gettimeofday(&stop, NULL);
+	printf("took %d\n", stop.tv_usec - start.tv_usec);
 
 	// Send success signal back to client
    	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));

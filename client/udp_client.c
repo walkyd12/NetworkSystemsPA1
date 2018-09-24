@@ -13,11 +13,10 @@
 #include <errno.h>
 
 #define MAXBUFSIZE 1000000
-#define cipherKey 'S'
 
 char *END_FLAG = "#End of File#";
 char* SUCC_FLAG = "ok";
-char* FILE_ERR_FLAG = "File not found.";
+char* FILE_ERR_FLAG = "file not found.";
 
 int PutFile(int sock, struct sockaddr_in remote,char* filename);
 int GetFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length);
@@ -56,6 +55,7 @@ int main (int argc, char * argv[])
 		printf("unable to create socket");
 	}
 
+	char command[MAXBUFSIZE];
 	/******************
 	  sendto() sends immediately.  
 	  it will report an error if the message fails to leave the computer
@@ -73,7 +73,7 @@ int main (int argc, char * argv[])
 		printf("exit\n");
 		printf("-----------------------------------\n");
 
-		char command[MAXBUFSIZE];
+		memset(command, 0, MAXBUFSIZE);
 		// Get user input and remove new line characters
 		fgets(command, MAXBUFSIZE, stdin);
 		if ((strlen(command) > 0) && (command[strlen(command) - 1] == '\n'))
@@ -155,6 +155,8 @@ int PutFile(int sock, struct sockaddr_in remote, char* filename) {
 
     // Send the end of file signal to the server
     sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+
+    close(fd);
 
 	return 1;
 }
