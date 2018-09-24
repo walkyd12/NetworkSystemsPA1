@@ -14,21 +14,34 @@
 #include <memory.h>
 #include <string.h>
 #include <dirent.h>
+#include <fcntl.h>
 /* You will have to modify the program below */
 
-#define MAXBUFSIZE 1000000
-#define cipherKey 'S'
+#define MAXBUFSIZE 		100
+#define DEBUG 			1
+#define MAX_RESEND		1
 
 char* END_FLAG = "#End of file.#";
 char* SUCC_FLAG = "ok";
 char* FAIL_FLAG = "not ok";
 char* FILE_ERR_FLAG = "file not found.";
 char* FILE_SUCC_FLAG = "file found.";
+char* RESEND_FLAG = "please resend";
+char* DONT_RESEND_FLAG = "dont resend";
 
 int GetFile(int sock, struct sockaddr_in remote,char* filename);
 int PutFile(int sock, struct sockaddr_in remote,char* filename, unsigned int remote_length);
 int DeleteFile(int sock, struct sockaddr_in remote,char* filename);
 int List(int sock, struct sockaddr_in remote);
+
+unsigned checksum(void *buffer, size_t len, unsigned int seed) {
+      unsigned char *buf = (unsigned char *)buffer;
+      size_t i;
+
+      for (i = 0; i < len; ++i)
+            seed += (unsigned int)(*buf++);
+      return seed;
+}
 
 int main (int argc, char * argv[] )
 {
@@ -102,6 +115,9 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename) {
 	// Attempt to open file named filename, read only
     fd = open(filename, 'r');
 
+    struct timeval watch_stop, watch_start;
+	gettimeofday(&watch_start, NULL);
+
     // File does not exist
     if (fd < 0) {
     	printf("\nFile open failed! File: %s\n", filename);
@@ -109,43 +125,77 @@ int GetFile(int sock, struct sockaddr_in remote, char* filename) {
 		sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
         return 0;
 	}
+
     // Found a file, send file found message to client
     sendto(sock, FILE_SUCC_FLAG, strlen(FILE_SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
     
-    // Read the contents of the file and store it in the filename buffer
-    while ((n = read(fd, filename, MAXBUFSIZE-4)) > 0) {
-        // Send this data to the client
-        sendto(sock, filename, n, 0, (struct sockaddr *)&remote, sizeof(remote));
-    }
+	int offset = 0;
+	int fileSize;
+    while(1) {
+	    // Read the contents of the file and store it in the filename buffer
+	    while ((n = read(fd, filename, MAXBUFSIZE)) > 0) {
+	        // Send this data to the client
+	    	if(offset == 0)
+				fileSize = n;
+
+	        sendto(sock, filename, n, 0, (struct sockaddr *)&remote, sizeof(remote));
+
+	        gettimeofday(&watch_stop, NULL);
+	        if( (watch_stop.tv_usec - 100000) > watch_start.tv_usec) {
+	        	printf("Get timed out.\n");
+	        	return 0;
+	    	}
+	    }
+	    if(offset > fileSize)
+			break;
+	    offset += MAXBUFSIZE;
+	}
     // Send the end of file flag to the client
     sendto(sock, END_FLAG, strlen(END_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
     // Send success message back to client
     sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+
     close(fd);
+
+    gettimeofday(&watch_stop, NULL);
+#ifdef DEBUG
+	printf("Get took %d\n", watch_stop.tv_usec - watch_start.tv_usec);
+#endif
 	return 1;
 }
 int PutFile(int sock, struct sockaddr_in remote, char* filename, unsigned int remote_length) {
 	int fd, n, nbytes;
-	
+
 	// Open a new file with the name file name with read, write and create flags set
 	fd = open(filename, O_RDWR | O_CREAT, 0666);
 
-	struct timeval stop, start;
-	gettimeofday(&start, NULL);
+	struct timeval watch_stop, watch_start;
+	gettimeofday(&watch_start, NULL);
 
+
+	unsigned int fileChecksum = 0;
 	// Store file contents in filename buffer
-    while ((n = recvfrom(sock, filename, MAXBUFSIZE-4, 0, (struct sockaddr *)&remote, &remote_length))) {
-        // If we get the signal of the end of the file or if there is an error, stop waiting for data
-        if (!(memcmp(filename, END_FLAG, sizeof(&END_FLAG)) || !(memcmp(filename, FILE_ERR_FLAG, sizeof(&FILE_ERR_FLAG))))) {
-            break;
-        }
-        // write data from the filename buffer into the new file
-        write(fd, filename, n);
-    }
-    close(fd);
+	while ((n = recvfrom(sock, filename, MAXBUFSIZE, 0, (struct sockaddr *)&remote, &remote_length))) {
+	    // If we get the signal of the end of the file or if there is an error, stop waiting for data
+	    if ( !(memcmp(filename, END_FLAG, sizeof(&END_FLAG))) ) {
+	        break;
+	    }
+	    if( !(memcmp(filename, FILE_ERR_FLAG, sizeof(&FILE_ERR_FLAG))) ) {
+	    	if(remove(filename) != 0) {
+				sendto(sock, FILE_ERR_FLAG, strlen(FILE_ERR_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
+				return 0;
+			}
+	    }
+	    // write data from the filename buffer into the new file
+	    write(fd, filename, n);
+	}
+	
+	close(fd);
 
-    gettimeofday(&stop, NULL);
-	printf("took %d\n", stop.tv_usec - start.tv_usec);
+    gettimeofday(&watch_stop, NULL);
+#ifdef DEBUG
+	printf("Put took %d\n", watch_stop.tv_usec - watch_start.tv_usec);
+#endif
 
 	// Send success signal back to client
    	sendto(sock, SUCC_FLAG, strlen(SUCC_FLAG), 0, (struct sockaddr *)&remote, sizeof(remote));
