@@ -16,7 +16,7 @@ Run the client with the command:
 where IP address is the address of the machine running the server code and port is the port number that the server is bound to.
 
 
-An interface will appear to the client. The client has a choice 4 commands:
+An interface will appear to the client. The client has a choice of 4 commands:
 
 get <filename>
 Gets the file from the server and copies it to the host's current directory
